@@ -7,6 +7,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "checker.h"
+#include "version.h"
 
 // 위반 종류 → 사람이 읽는 라벨
 static std::string kindLabel(Violation::Kind k) {
@@ -22,8 +23,14 @@ static std::string kindLabel(Violation::Kind k) {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "--version") {
+        std::cout << "ieum " << kIeumVersion << "\n";
+        return 0;
+    }
+
     if (argc < 2) {
-        std::cerr << "사용법: ieum <소스파일.ieum>\n";
+        std::cerr << "사용법: ieum <소스파일.ieum>\n"
+                  << "       ieum --version\n";
         return 2;
     }
 

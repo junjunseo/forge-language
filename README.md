@@ -2,6 +2,8 @@
 
 구조적으로 잘못된 모듈 의존 관계를 실행 전에 거부하는 작은 프로그래밍 언어와 검사기입니다.
 
+현재 PoC 버전은 `0.1.0`이며 저장소 루트의 `VERSION`을 빌드 경로 전체가 공통으로 사용합니다.
+
 현재 구현은 선언의 유효성과 다음 구조 규칙을 검사합니다.
 
 1. 같은 이름의 모듈 중복 선언 금지
@@ -61,6 +63,14 @@ cmake --build build --config Release
 
 ## 실행
 
+버전 확인:
+
+```powershell
+.\build\ieum.exe --version
+```
+
+예상 출력은 `ieum 0.1.0`입니다.
+
 정상 예제:
 
 ```powershell
@@ -116,12 +126,14 @@ ctest --test-dir build -C Release --output-on-failure
 - Lexer → Parser → Checker 통합 테스트 16개
 - 구조 검사기 시나리오 테스트 31개
 - 총 67개 assert 기반 자동 테스트
-- 정상 예제 1개 통과와 위반 예제 5개 실패를 확인하는 smoke 테스트
+- CLI 버전이 `VERSION`과 일치하는지 확인하는 테스트
+- 정상 예제 1개의 종료 코드 `0`과 위반 예제 5개의 종료 코드 `1`을 확인하는 smoke 테스트
+- 예제별 대표 성공·위반 진단이 출력되는지 확인하는 테스트
 - 정상 구조, 선언 오류, 주석·공백·BOM 입력, 미선언 의존, 직접·다단계·자기·복수 순환, 직접·전이적·간접 경로 계층 위반, 복합 위반 검증
 
 ## CI
 
-GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, build, CTest를 실행합니다. CTest는 위의 67개 assert 기반 자동 테스트와 6개 예제 smoke 테스트를 함께 검증합니다.
+GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, build, CTest를 실행합니다. CTest는 위의 67개 assert 기반 자동 테스트, CLI 버전 테스트와 6개 예제 smoke 테스트를 함께 검증합니다.
 
 새 환경에서 재현할 때는 다음 순서를 기준으로 확인합니다.
 
@@ -129,20 +141,31 @@ GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, bui
 2. `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1` 또는 `ctest --test-dir build -C Release --output-on-failure`를 실행합니다.
 3. README의 시연 흐름에 있는 6개 예제가 문서와 같은 종료 코드로 동작하는지 확인합니다.
 
+## v0.1.0 릴리스 준비
+
+- [변경 기록](CHANGELOG.md)에서 v0.1.0의 포함 기능과 알려진 제한을 확인할 수 있습니다.
+- [릴리스 체크리스트](docs/RELEASE_CHECKLIST.md)에서 새 환경 재현, 예제 결과, CI, 태그 생성 조건을 확인할 수 있습니다.
+- 태그와 GitHub Release는 PR 병합 후 체크리스트를 모두 통과한 시점에 생성합니다.
+
 ## 프로젝트 구조
 
 ```text
 .github/workflows/  GitHub Actions CI
+cmake/              CTest 예제 결과 검증 스크립트
+docs/               릴리스 체크리스트
 src/
   lexer.h       토큰 생성
   parser.h      구조 선언을 AST로 변환
   ast.h         모듈 및 계층 선언 자료구조
   checker.h     의존성과 계층 규칙 검사
+  version.h     빌드 시스템이 전달한 버전 노출
   main.cpp      명령행 프로그램
 test/           자동 테스트
 examples/       정상 및 위반 시연 파일
 scripts/        Windows 빌드·테스트 스크립트
 CMakeLists.txt  CMake 빌드·CTest 정의
+VERSION         빌드 경로가 공유하는 PoC 버전
+CHANGELOG.md    버전별 기능·제한 기록
 기획안/         프로젝트 기획 문서
 ```
 

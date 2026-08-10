@@ -2,6 +2,13 @@ $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 $compiler = (Get-Command g++ -ErrorAction Stop).Source
+$version = (Get-Content -LiteralPath (Join-Path $root "VERSION") -Raw).Trim()
+
+if ($version -notmatch '^\d+\.\d+\.\d+$') {
+    throw "VERSION must contain a semantic version such as 0.1.0"
+}
+
+$versionDefinition = '-DIEUM_VERSION=\"' + $version + '\"'
 
 Push-Location $root
 try {
@@ -12,7 +19,8 @@ try {
         "-Wall",
         "-Wextra",
         "-pedantic",
-        "-Isrc"
+        "-Isrc",
+        $versionDefinition
     )
 
     $targets = @(
@@ -42,30 +50,52 @@ try {
         throw "Compilation failed: src/main.cpp"
     }
 
+    Write-Host "Run: build/ieum.exe --version"
+    $versionOutput = & ".\build\ieum.exe" "--version" 2>&1
+    $versionExitCode = $LASTEXITCODE
+    $versionText = ($versionOutput -join "`n").Trim()
+    Write-Host $versionText
+    if ($versionExitCode -ne 0) {
+        throw "Expected --version to exit with 0, got $versionExitCode"
+    }
+    if ($versionText -ne "ieum $version") {
+        throw "Expected version output 'ieum $version', got '$versionText'"
+    }
+    Write-Host ""
+
     Write-Host "Run: build/ieum.exe examples/valid.ieum"
-    & ".\build\ieum.exe" ".\examples\valid.ieum"
-    if ($LASTEXITCODE -ne 0) {
+    $validOutput = & ".\build\ieum.exe" ".\examples\valid.ieum" 2>&1
+    $validExitCode = $LASTEXITCODE
+    $validText = $validOutput -join "`n"
+    Write-Host $validText
+    if ($validExitCode -ne 0) {
         throw "Expected valid example to pass"
     }
     Write-Host ""
 
     $invalidExamples = @(
-        "implicit_dependency",
-        "cyclic_dependency",
-        "layer_violation",
-        "transitive_layer_violation",
-        "invalid_declarations"
+        @{ Name = "implicit_dependency"; Expected = "notification" },
+        @{ Name = "cyclic_dependency"; Expected = "order -> payment -> order" },
+        @{ Name = "layer_violation"; Expected = "'data'" },
+        @{ Name = "transitive_layer_violation"; Expected = "'data'" },
+        @{ Name = "invalid_declarations"; Expected = "'missing'" }
     )
 
     foreach ($example in $invalidExamples) {
-        $path = ".\examples\$example.ieum"
+        $path = ".\examples\$($example.Name).ieum"
         Write-Host "Run: build/ieum.exe $path"
-        & ".\build\ieum.exe" $path
-        if ($LASTEXITCODE -eq 0) {
+        $exampleOutput = & ".\build\ieum.exe" $path 2>&1
+        $exampleExitCode = $LASTEXITCODE
+        $exampleText = $exampleOutput -join "`n"
+        Write-Host $exampleText
+        if ($exampleExitCode -eq 0) {
             throw "Expected structural violation for $path"
         }
-        if ($LASTEXITCODE -ne 1) {
-            throw "Expected exit code 1 for $path, got $LASTEXITCODE"
+        if ($exampleExitCode -ne 1) {
+            throw "Expected exit code 1 for $path, got $exampleExitCode"
+        }
+        if (-not $exampleText.Contains($example.Expected)) {
+            throw "Expected output '$($example.Expected)' for $path"
         }
         Write-Host ""
     }
