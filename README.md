@@ -2,7 +2,7 @@
 
 구조적으로 잘못된 모듈 의존 관계를 실행 전에 거부하는 작은 프로그래밍 언어와 검사기입니다.
 
-현재 PoC 버전은 `0.1.0`이며 저장소 루트의 `VERSION`을 빌드 경로 전체가 공통으로 사용합니다.
+공식 PoC 릴리스는 [`v0.1.0`](https://github.com/junjunseo/ieum/releases/tag/v0.1.0)이며 저장소 루트의 `VERSION`을 빌드 경로 전체가 공통으로 사용합니다.
 
 현재 구현은 선언의 유효성과 다음 구조 규칙을 검사합니다.
 
@@ -141,11 +141,12 @@ GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, bui
 2. `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1` 또는 `ctest --test-dir build -C Release --output-on-failure`를 실행합니다.
 3. README의 시연 흐름에 있는 6개 예제가 문서와 같은 종료 코드로 동작하는지 확인합니다.
 
-## v0.1.0 릴리스 준비
+## v0.1.0 릴리스
 
-- [변경 기록](CHANGELOG.md)에서 v0.1.0의 포함 기능과 알려진 제한을 확인할 수 있습니다.
-- [릴리스 체크리스트](docs/RELEASE_CHECKLIST.md)에서 새 환경 재현, 예제 결과, CI, 태그 생성 조건을 확인할 수 있습니다.
-- 태그와 GitHub Release는 PR 병합 후 체크리스트를 모두 통과한 시점에 생성합니다.
+- `v0.1.0`은 2026년 8월 10일에 확정한 이음 구조 검사 코어의 첫 공식 PoC 릴리스입니다.
+- [변경 기록](CHANGELOG.md)에서 포함 기능과 알려진 제한을 확인할 수 있습니다.
+- [릴리스 체크리스트](docs/RELEASE_CHECKLIST.md)에서 새 환경 재현, 예제 결과, CI와 게시 절차를 확인할 수 있습니다.
+- GitHub Release는 소스 코드 ZIP/TAR.GZ를 제공하며, 실행 파일은 빌드 절차를 따라 직접 생성합니다.
 
 ## 프로젝트 구조
 
