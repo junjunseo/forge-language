@@ -2,6 +2,13 @@ $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 $compiler = (Get-Command g++ -ErrorAction Stop).Source
+$version = (Get-Content -LiteralPath (Join-Path $root "VERSION") -Raw).Trim()
+
+if ($version -notmatch '^\d+\.\d+\.\d+$') {
+    throw "VERSION must contain a semantic version such as 0.1.0"
+}
+
+$versionDefinition = '-DIEUM_VERSION=\"' + $version + '\"'
 
 Push-Location $root
 try {
@@ -13,6 +20,7 @@ try {
         -Wextra `
         -pedantic `
         -Isrc `
+        $versionDefinition `
         src/main.cpp `
         -o build/ieum.exe
 

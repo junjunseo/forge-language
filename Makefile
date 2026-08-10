@@ -1,6 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic
-CPPFLAGS = -Isrc
+VERSION := $(strip $(file <VERSION))
+CPPFLAGS = -Isrc -DIEUM_VERSION=\"$(VERSION)\"
 
 ifeq ($(OS),Windows_NT)
 	EXE = .exe
@@ -11,7 +12,7 @@ TARGET = $(BUILD_DIR)/ieum$(EXE)
 TEST_PARSER = $(BUILD_DIR)/testParser$(EXE)
 TEST_PIPELINE = $(BUILD_DIR)/testPipeline$(EXE)
 TEST_CHECKER = $(BUILD_DIR)/testChecker$(EXE)
-HEADERS = src/token.h src/ast.h src/lexer.h src/parser.h src/checker.h
+HEADERS = src/token.h src/ast.h src/lexer.h src/parser.h src/checker.h src/version.h
 INVALID_EXAMPLES = \
 	examples/implicit_dependency.ieum \
 	examples/cyclic_dependency.ieum \
@@ -24,7 +25,7 @@ all: $(TARGET)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(TARGET): src/main.cpp $(HEADERS) | $(BUILD_DIR)
+$(TARGET): src/main.cpp $(HEADERS) VERSION | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@
 
 $(TEST_PARSER): test/testParser.cpp src/token.h src/ast.h src/parser.h | $(BUILD_DIR)
@@ -43,6 +44,7 @@ test: $(TEST_PARSER) $(TEST_PIPELINE) $(TEST_CHECKER) $(TARGET)
 	./$(TEST_PARSER)
 	./$(TEST_PIPELINE)
 	./$(TEST_CHECKER)
+	test "$$(./$(TARGET) --version)" = "ieum $(VERSION)"
 	./$(TARGET) examples/valid.ieum
 	@for example in $(INVALID_EXAMPLES); do \
 		./$(TARGET) $$example >/dev/null 2>&1; \
