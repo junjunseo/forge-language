@@ -80,6 +80,7 @@ function(add_ieum_example_test name expected_exit expected_text)
 endfunction()
 
 add_ieum_example_test(valid 0 "")
+add_ieum_example_test(module_body 0 "body_modules=2")
 add_ieum_example_test(implicit_dependency 1 "notification")
 add_ieum_example_test(cyclic_dependency 1 "order -> payment -> order")
 add_ieum_example_test(layer_violation 1 "'data'")

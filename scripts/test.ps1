@@ -86,15 +86,26 @@ try {
     }
     Write-Host ""
 
-    Write-Host "Run: build/ieum.exe examples/valid.ieum"
-    $validOutput = & ".\build\ieum.exe" ".\examples\valid.ieum" 2>&1
-    $validExitCode = $LASTEXITCODE
-    $validText = $validOutput -join "`n"
-    Write-Host $validText
-    if ($validExitCode -ne 0) {
-        throw "Expected valid example to pass"
+    $validExamples = @(
+        @{ Name = "valid"; Expected = "modules=3" },
+        @{ Name = "module_body"; Expected = "body_modules=2" }
+    )
+
+    foreach ($example in $validExamples) {
+        $path = ".\examples\$($example.Name).ieum"
+        Write-Host "Run: build/ieum.exe $path"
+        $validOutput = & ".\build\ieum.exe" $path 2>&1
+        $validExitCode = $LASTEXITCODE
+        $validText = $validOutput -join "`n"
+        Write-Host $validText
+        if ($validExitCode -ne 0) {
+            throw "Expected valid example to pass: $path"
+        }
+        if (-not $validText.Contains($example.Expected)) {
+            throw "Expected output '$($example.Expected)' for $path"
+        }
+        Write-Host ""
     }
-    Write-Host ""
 
     $invalidExamples = @(
         @{ Name = "implicit_dependency"; Expected = "notification" },

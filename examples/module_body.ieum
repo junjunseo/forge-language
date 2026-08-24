@@ -1,0 +1,15 @@
+# F1 module body example
+module data {
+  fn save(item) {}
+}
+
+module service depends data {
+  let cache
+
+  fn handle(request) {
+    let prepared
+    call save(prepared)
+  }
+}
+
+layer service above data

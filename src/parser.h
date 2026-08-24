@@ -1,20 +1,16 @@
 #ifndef IEUM_PARSER_H
 #define IEUM_PARSER_H
 
-#include <string>
-#include <vector>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 #include "token.h"
 #include "ast.h"
 
 // ── 파서 ───────────────────────────────────────────────
-// 토큰 스트림(렉서 출력)을 받아 Program(구조 AST)을 만든다.
-// 문법(1학기):
-//   program     := { declaration }
-//   declaration := moduleDecl | layerDecl | NEWLINE
-//   moduleDecl  := MODULE IDENTIFIER [ DEPENDS identList ]
-//   layerDecl   := LAYER IDENTIFIER ABOVE IDENTIFIER
-//   identList   := IDENTIFIER { COMMA IDENTIFIER }
+// 토큰 스트림(렉서 출력)을 받아 Program AST를 만든다.
+// 전체 문법은 docs/GRAMMAR.md에서 관리한다.
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens)
@@ -63,7 +59,133 @@ private:
                            "',' 다음에는 의존 대상 이름이 와야 합니다").value);
             }
         }
+
+        if (check(TokenType::LEFT_BRACE)) {
+            decl.hasBody = true;
+            advance();
+            parseModuleBody(decl);
+        }
         return decl;
+    }
+
+    void parseModuleBody(ModuleDecl& module) {
+        if (check(TokenType::RIGHT_BRACE)) {
+            advance();
+            return;
+        }
+
+        consumeBlockStart("모듈 본문의 여는 중괄호 뒤에는 줄바꿈이 필요합니다");
+        skipNewlines();
+
+        while (!check(TokenType::RIGHT_BRACE)) {
+            if (isAtEnd()) {
+                throw error("모듈 본문을 닫는 '}'가 필요합니다");
+            }
+
+            if (check(TokenType::LET)) {
+                module.variables.push_back(parseVariable());
+            } else if (check(TokenType::FN)) {
+                module.functions.push_back(parseFunction());
+            } else {
+                throw error("모듈 본문에는 'let' 또는 'fn' 선언만 올 수 있습니다");
+            }
+
+            consumeBlockMemberEnd("모듈 본문의 선언 뒤에는 줄바꿈이 필요합니다");
+            skipNewlines();
+        }
+
+        advance(); // RIGHT_BRACE
+    }
+
+    VariableDecl parseVariable() {
+        Token kw = advance(); // LET
+        Token name = expect(TokenType::IDENTIFIER,
+                            "let 다음에는 변수 이름이 와야 합니다");
+        return VariableDecl{name.value, kw.line};
+    }
+
+    FunctionDecl parseFunction() {
+        Token kw = advance(); // FN
+        Token name = expect(TokenType::IDENTIFIER,
+                            "fn 다음에는 함수 이름이 와야 합니다");
+        expect(TokenType::LEFT_PAREN, "함수 이름 뒤에는 '('가 필요합니다");
+
+        FunctionDecl function;
+        function.name = name.value;
+        function.line = kw.line;
+        if (!check(TokenType::RIGHT_PAREN)) {
+            function.parameters = parseIdentifierList("함수 매개변수 이름이 필요합니다");
+        }
+        expect(TokenType::RIGHT_PAREN, "함수 매개변수 목록을 닫는 ')'가 필요합니다");
+        expect(TokenType::LEFT_BRACE, "함수 본문을 여는 '{'가 필요합니다");
+        parseFunctionBody(function);
+        return function;
+    }
+
+    void parseFunctionBody(FunctionDecl& function) {
+        if (check(TokenType::RIGHT_BRACE)) {
+            advance();
+            return;
+        }
+
+        consumeBlockStart("함수 본문의 여는 중괄호 뒤에는 줄바꿈이 필요합니다");
+        skipNewlines();
+
+        while (!check(TokenType::RIGHT_BRACE)) {
+            if (isAtEnd()) {
+                throw error("함수 본문을 닫는 '}'가 필요합니다");
+            }
+
+            if (check(TokenType::LET)) {
+                const VariableDecl variable = parseVariable();
+                function.body.push_back({
+                    Statement::Kind::VariableDeclaration,
+                    variable.name,
+                    {},
+                    variable.line
+                });
+            } else if (check(TokenType::CALL)) {
+                function.body.push_back(parseCall());
+            } else {
+                throw error("함수 본문에는 'let' 또는 'call' 문장만 올 수 있습니다");
+            }
+
+            consumeBlockMemberEnd("함수 본문의 문장 뒤에는 줄바꿈이 필요합니다");
+            skipNewlines();
+        }
+
+        advance(); // RIGHT_BRACE
+    }
+
+    Statement parseCall() {
+        Token kw = advance(); // CALL
+        Token callee = expect(TokenType::IDENTIFIER,
+                              "call 다음에는 함수 이름이 와야 합니다");
+        expect(TokenType::LEFT_PAREN, "호출할 함수 이름 뒤에는 '('가 필요합니다");
+
+        std::vector<std::string> arguments;
+        if (!check(TokenType::RIGHT_PAREN)) {
+            arguments = parseIdentifierList("호출 인자 이름이 필요합니다");
+        }
+        expect(TokenType::RIGHT_PAREN, "호출 인자 목록을 닫는 ')'가 필요합니다");
+
+        return Statement{
+            Statement::Kind::FunctionCall,
+            callee.value,
+            std::move(arguments),
+            kw.line
+        };
+    }
+
+    std::vector<std::string> parseIdentifierList(const std::string& itemError) {
+        std::vector<std::string> names;
+        names.push_back(expect(TokenType::IDENTIFIER, itemError).value);
+        while (check(TokenType::COMMA)) {
+            advance();
+            names.push_back(expect(TokenType::IDENTIFIER,
+                                   "',' 다음에는 식별자가 와야 합니다").value);
+        }
+        return names;
     }
 
     LayerDecl parseLayer() {
@@ -85,6 +207,10 @@ private:
     const Token& peek() const { return tokens_[pos_]; }
     bool check(TokenType t) const { return peek().type == t; }
 
+    void skipNewlines() {
+        while (check(TokenType::NEWLINE)) advance();
+    }
+
     Token advance() {
         Token t = tokens_[pos_];
         if (!isAtEnd()) pos_++;
@@ -101,6 +227,19 @@ private:
         if (check(TokenType::NEWLINE)) { advance(); return; }
         if (isAtEnd()) return;
         throw error("한 줄에는 하나의 선언만 올 수 있습니다");
+    }
+
+    void consumeBlockStart(const std::string& message) {
+        if (!check(TokenType::NEWLINE)) throw error(message);
+        advance();
+    }
+
+    void consumeBlockMemberEnd(const std::string& message) {
+        if (check(TokenType::NEWLINE)) {
+            advance();
+            return;
+        }
+        throw error(message);
     }
 
     std::runtime_error error(const std::string& msg) const {
