@@ -22,6 +22,9 @@ INVALID_EXAMPLES = \
 	examples/layer_violation.ieum \
 	examples/transitive_layer_violation.ieum \
 	examples/invalid_declarations.ieum
+VALID_EXAMPLES = \
+	examples/valid.ieum \
+	examples/module_body.ieum
 
 all: $(TARGET)
 
@@ -52,7 +55,9 @@ test: $(TEST_PARSER) $(TEST_PIPELINE) $(TEST_CHECKER) $(TARGET) $(BENCHMARK_CHEC
 	./$(TEST_CHECKER)
 	./$(BENCHMARK_CHECKER) 2 1
 	test "$$(./$(TARGET) --version)" = "ieum $(VERSION)"
-	./$(TARGET) examples/valid.ieum
+	@for example in $(VALID_EXAMPLES); do \
+		./$(TARGET) $$example || exit 1; \
+	done
 	@for example in $(INVALID_EXAMPLES); do \
 		./$(TARGET) $$example >/dev/null 2>&1; \
 		status=$$?; \

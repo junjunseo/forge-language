@@ -4,13 +4,39 @@
 #include <string>
 #include <vector>
 
-// ── 구조 선언 AST ──────────────────────────────────────
-// 1학기엔 "구조"만 표현한다. 표현식/문장 노드는 2학기에 추가.
+// ── 구조 선언과 F1 모듈 본문 AST ───────────────────────
 
-// module <name> [depends <dep1>, <dep2>, ...]
+struct VariableDecl {
+    std::string name;
+    int line;
+};
+
+struct Statement {
+    enum class Kind {
+        VariableDeclaration,
+        FunctionCall
+    };
+
+    Kind kind;
+    std::string name;                  // 변수 이름 또는 호출 대상
+    std::vector<std::string> arguments; // 호출이 아니면 비어 있음
+    int line;
+};
+
+struct FunctionDecl {
+    std::string name;
+    std::vector<std::string> parameters;
+    std::vector<Statement> body;
+    int line;
+};
+
+// module <name> [depends <dep1>, <dep2>, ...] [moduleBody]
 struct ModuleDecl {
     std::string name;
     std::vector<std::string> deps;  // depends 가 없으면 비어 있음
+    bool hasBody = false;
+    std::vector<VariableDecl> variables;
+    std::vector<FunctionDecl> functions;
     int line;
 };
 

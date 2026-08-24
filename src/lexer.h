@@ -8,8 +8,7 @@
 
 // ── 렉서 ───────────────────────────────────────────────
 // 소스 문자열을 토큰 시퀀스로 변환한다.
-// 1학기 범위: 구조 선언만 다루므로 인식 대상은
-//   키워드(module/depends/layer/above), 식별자, 쉼표, 줄바꿈 뿐이다.
+// 인식 대상은 구조 선언, F1 모듈 본문 키워드, 구분 기호와 식별자다.
 // 식별자 규칙: [A-Za-z_][A-Za-z0-9_]* (영어 전용).
 class Lexer {
 public:
@@ -37,12 +36,7 @@ public:
                 continue;
             }
 
-            // 쉼표 — 의존 대상 나열
-            if (src[pos] == ',') {
-                tokens.push_back(Token(TokenType::COMMA, ",", line));
-                pos++;
-                continue;
-            }
+            if (readPunctuation(tokens)) continue;
 
             // 단어 (키워드 or 식별자)
             if (isIdentStart(pos)) {
@@ -91,6 +85,22 @@ private:
         return std::isalnum(c) || c == '_';
     }
 
+    bool readPunctuation(std::vector<Token>& tokens) {
+        TokenType type;
+        switch (src[pos]) {
+            case '{': type = TokenType::LEFT_BRACE; break;
+            case '}': type = TokenType::RIGHT_BRACE; break;
+            case '(': type = TokenType::LEFT_PAREN; break;
+            case ')': type = TokenType::RIGHT_PAREN; break;
+            case ',': type = TokenType::COMMA; break;
+            default: return false;
+        }
+
+        tokens.push_back(Token(type, std::string(1, src[pos]), line));
+        pos++;
+        return true;
+    }
+
     // ── 단어(키워드 or 식별자) 읽기 ──────────────────
     Token readWord() {
         size_t start = pos;
@@ -98,11 +108,14 @@ private:
             pos++;
         std::string word = src.substr(start, pos - start);
 
-        // 키워드 매핑 (구조 선언 전용)
+        // 키워드 매핑
         if (word == "module")  return Token(TokenType::MODULE,  word, line);
         if (word == "depends") return Token(TokenType::DEPENDS, word, line);
         if (word == "layer")   return Token(TokenType::LAYER,   word, line);
         if (word == "above")   return Token(TokenType::ABOVE,   word, line);
+        if (word == "fn")      return Token(TokenType::FN,      word, line);
+        if (word == "let")     return Token(TokenType::LET,     word, line);
+        if (word == "call")    return Token(TokenType::CALL,    word, line);
 
         return Token(TokenType::IDENTIFIER, word, line);
     }

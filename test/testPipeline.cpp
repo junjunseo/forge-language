@@ -125,12 +125,92 @@ int main() {
                    "ignores leading and trailing blank lines");
     }
 
+    try {
+        const Program prog = parse(
+            "module data {\n"
+            "  let connection\n"
+            "  fn persist(value) {\n"
+            "    let copy\n"
+            "    call save(value, copy)\n"
+            "  }\n"
+            "}\n"
+            "module service depends data {\n"
+            "  fn run(request) {\n"
+            "    call persist(request)\n"
+            "  }\n"
+            "}\n"
+            "layer service above data\n");
+
+        const ModuleDecl& data = prog.modules[0];
+        const FunctionDecl& persist = data.functions[0];
+        const FunctionDecl& run = prog.modules[1].functions[0];
+        assertTrue(prog.modules.size() == 2, "pipeline parses modules with bodies");
+        assertTrue(data.hasBody, "pipeline marks module body presence");
+        assertTrue(data.variables.size() == 1 &&
+                   data.variables[0].name == "connection" &&
+                   data.variables[0].line == 2,
+                   "pipeline preserves module variable and line");
+        assertTrue(persist.name == "persist" && persist.line == 3,
+                   "pipeline preserves function and line");
+        assertTrue(persist.parameters.size() == 1 &&
+                   persist.parameters[0] == "value",
+                   "pipeline parses function parameter");
+        assertTrue(persist.body.size() == 2,
+                   "pipeline preserves function statement order");
+        assertTrue(persist.body[0].kind == Statement::Kind::VariableDeclaration &&
+                   persist.body[1].kind == Statement::Kind::FunctionCall,
+                   "pipeline distinguishes variable and call statements");
+        assertTrue(persist.body[1].name == "save" && persist.body[1].line == 5,
+                   "pipeline preserves call target and line");
+        assertTrue(persist.body[1].arguments.size() == 2 &&
+                   persist.body[1].arguments[0] == "value" &&
+                   persist.body[1].arguments[1] == "copy",
+                   "pipeline preserves call argument order");
+        assertTrue(run.body.size() == 1 && run.body[0].name == "persist",
+                   "pipeline parses body after dependency header");
+
+        Checker checker(prog);
+        assertTrue(checker.check().empty(),
+                   "module bodies preserve structural checker result");
+    } catch (const std::exception& e) {
+        std::cerr << "[FAIL] module body pipeline threw: " << e.what() << "\n";
+        failed++;
+        assert(false);
+    }
+
+    {
+        const Program prog = parse(
+            "module empty {}\n"
+            "module worker {\n"
+            "  fn noop() {}\n"
+            "}\n");
+        assertTrue(prog.modules[0].hasBody &&
+                   prog.modules[0].variables.empty() &&
+                   prog.modules[0].functions.empty(),
+                   "lexer-parser accepts empty module body");
+        assertTrue(prog.modules[1].functions.size() == 1 &&
+                   prog.modules[1].functions[0].body.empty(),
+                   "lexer-parser accepts empty function body");
+    }
+
     assertParseThrows("module ui @ domain\n", "rejects unknown character in source");
     assertParseThrows("module ui depends\n", "rejects incomplete depends declaration");
     assertParseThrows("module 데이터\n", "rejects non-ASCII identifier");
     assertParseThrows("depends data\n", "rejects declaration without module or layer keyword");
+    assertParseThrows("module app { let value\n}\n",
+                      "rejects module content on opening line");
+    assertParseThrows("module app {\n  let value\n",
+                      "rejects missing module closing brace");
+    assertParseThrows(
+        "module app {\n  fn run() {\n    call helper(value\n  }\n}\n",
+        "rejects missing call closing parenthesis");
+    assertParseThrows("let value\n", "rejects variable at top level");
+    assertParseThrows("module app {\n  call run()\n}\n",
+                      "rejects call directly in module body");
+    assertParseThrows("module app {\n  fn run() { call helper() }\n}\n",
+                      "rejects function content on opening line");
 
-    assertTestCount(16);
+    assertTestCount(35);
 
     std::cout << "\nPipeline tests: " << passed << " passed, "
               << failed << " failed\n";

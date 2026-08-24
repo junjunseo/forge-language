@@ -22,6 +22,26 @@ static std::string kindLabel(Violation::Kind k) {
     return "알 수 없음";
 }
 
+struct BodySummary {
+    std::size_t modules = 0;
+    std::size_t moduleVariables = 0;
+    std::size_t functions = 0;
+    std::size_t functionStatements = 0;
+};
+
+static BodySummary summarizeBodies(const Program& program) {
+    BodySummary summary;
+    for (const auto& module : program.modules) {
+        if (module.hasBody) summary.modules++;
+        summary.moduleVariables += module.variables.size();
+        summary.functions += module.functions.size();
+        for (const auto& function : module.functions) {
+            summary.functionStatements += function.body.size();
+        }
+    }
+    return summary;
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]) == "--version") {
         std::cout << "ieum " << kIeumVersion << "\n";
@@ -53,7 +73,22 @@ int main(int argc, char** argv) {
         // 3) 구조 요약 출력
         std::cout << "── 파싱 결과 ──\n";
         std::cout << "모듈 " << prog.modules.size()
-                  << "개, 계층 선언 " << prog.layers.size() << "개\n\n";
+                  << "개, 계층 선언 " << prog.layers.size() << "개"
+                  << " (modules=" << prog.modules.size()
+                  << ", layers=" << prog.layers.size() << ")\n\n";
+        const BodySummary bodySummary = summarizeBodies(prog);
+        if (bodySummary.modules > 0) {
+            std::cout << "모듈 본문 " << bodySummary.modules
+                      << "개, 모듈 변수 " << bodySummary.moduleVariables
+                      << "개, 함수 " << bodySummary.functions
+                      << "개, 함수 문장 " << bodySummary.functionStatements
+                      << "개"
+                      << " (body_modules=" << bodySummary.modules
+                      << ", module_variables=" << bodySummary.moduleVariables
+                      << ", functions=" << bodySummary.functions
+                      << ", function_statements=" << bodySummary.functionStatements
+                      << ")\n\n";
+        }
 
         // 4) 의존 검사 (끌 수 없음 — 항상 전부 적용)
         Checker checker(prog);
