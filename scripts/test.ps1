@@ -44,6 +44,29 @@ try {
         Write-Host ""
     }
 
+    Write-Host "Build: benchmark/benchmarkChecker.cpp"
+    & $compiler @commonArgs `
+        "-O2" `
+        "-DNDEBUG" `
+        "benchmark/benchmarkChecker.cpp" `
+        -o "build/benchmarkChecker.exe"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Compilation failed: benchmark/benchmarkChecker.cpp"
+    }
+
+    Write-Host "Run: build/benchmarkChecker.exe 2 1"
+    $benchmarkOutput = & ".\build\benchmarkChecker.exe" 2 1 2>&1
+    $benchmarkExitCode = $LASTEXITCODE
+    $benchmarkText = $benchmarkOutput -join "`n"
+    Write-Host $benchmarkText
+    if ($benchmarkExitCode -ne 0) {
+        throw "Benchmark smoke test failed"
+    }
+    if (-not $benchmarkText.Contains("scenario=layered-valid-chain")) {
+        throw "Benchmark smoke test did not report the expected scenario"
+    }
+    Write-Host ""
+
     Write-Host "Build: src/main.cpp"
     & $compiler @commonArgs "src/main.cpp" -o "build/ieum.exe"
     if ($LASTEXITCODE -ne 0) {

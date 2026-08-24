@@ -129,11 +129,30 @@ ctest --test-dir build -C Release --output-on-failure
 - CLI 버전이 `VERSION`과 일치하는지 확인하는 테스트
 - 정상 예제 1개의 종료 코드 `0`과 위반 예제 5개의 종료 코드 `1`을 확인하는 smoke 테스트
 - 예제별 대표 성공·위반 진단이 출력되는지 확인하는 테스트
+- 2개 모듈 합성 corpus로 성능 측정 경로를 확인하는 benchmark smoke 테스트
 - 정상 구조, 선언 오류, 주석·공백·BOM 입력, 미선언 의존, 직접·다단계·자기·복수 순환, 직접·전이적·간접 경로 계층 위반, 복합 위반 검증
+
+## 성능 기준선
+
+구조 검사 성능은 결정적으로 생성되는 계층형 합성 corpus를 `Lexer -> Parser -> Checker` 전체 파이프라인에 입력해 측정합니다.
+
+Windows PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\benchmark.ps1
+```
+
+GNU Make:
+
+```sh
+make benchmark BENCHMARK_MODULES=200 BENCHMARK_ITERATIONS=11
+```
+
+측정 환경, 입력 구성, v0.1.0 결과와 해석은 [성능 기준선](docs/PERFORMANCE_BASELINE.md)에 기록합니다. 벤치마크는 하드웨어 독립적인 합격 시간을 강제하지 않으며, 같은 환경에서 기능 확장 전후의 중앙값을 비교하는 용도입니다.
 
 ## CI
 
-GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, build, CTest를 실행합니다. CTest는 위의 67개 assert 기반 자동 테스트, CLI 버전 테스트와 6개 예제 smoke 테스트를 함께 검증합니다.
+GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, build, CTest를 실행합니다. CTest는 위의 67개 assert 기반 자동 테스트, CLI 버전 테스트, 6개 예제 smoke 테스트와 benchmark smoke 테스트를 함께 검증합니다.
 
 새 환경에서 재현할 때는 다음 순서를 기준으로 확인합니다.
 
@@ -154,6 +173,7 @@ GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, bui
 .github/workflows/  GitHub Actions CI
 cmake/              CTest 예제 결과 검증 스크립트
 docs/               릴리스 체크리스트
+benchmark/          구조 검사 성능 기준선 실행 파일 소스
 src/
   lexer.h       토큰 생성
   parser.h      구조 선언을 AST로 변환
@@ -173,6 +193,19 @@ CHANGELOG.md    버전별 기능·제한 기록
 ## 현재 범위
 
 1학기 목표인 구조 검사 코어에 집중하고 있습니다. 현재는 모듈 선언, 의존 선언, 계층 선언을 파싱하고 구조 규칙 위반을 실행 전에 거부하는 최소 코어를 구현했습니다. 모듈 내부의 변수·함수·제어 흐름과 실행 백엔드는 이후 확장 범위입니다.
+
+## 2학기 로드맵
+
+2학기에는 구조 검사 코어의 회귀를 막으면서 다음 순서로 확장합니다.
+
+1. F1: 모듈 본문과 변수·함수·호출 AST
+2. F2: 이름 해석, Scope와 최소 인터프리터
+3. F3: 의존 그래프와 위반 경로 시각화
+4. F4: 실제 corpus 기반 정확도·성능 평가
+5. F5: 3분 전시 데모와 발표 자료
+6. F6: v1.0.0 최종 QA, 보고서와 사용 가이드
+
+기간, GitHub 이슈와 완료 조건은 [2학기 백로그](docs/SEMESTER2_BACKLOG.md)에서 관리하고, 주간 진행 상황은 [`docs/status/`](docs/status/)에 기록합니다.
 
 ## 시연 흐름
 
