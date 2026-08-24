@@ -1,0 +1,7 @@
+module app {
+  fn helper(value) {}
+
+  fn main() {
+    call helper()
+  }
+}

@@ -26,7 +26,9 @@ try {
     $targets = @(
         @{ Source = "test/testParser.cpp";   Output = "build/testParser.exe" },
         @{ Source = "test/testPipeline.cpp"; Output = "build/testPipeline.exe" },
-        @{ Source = "test/testChecker.cpp";  Output = "build/testChecker.exe" }
+        @{ Source = "test/testChecker.cpp";  Output = "build/testChecker.exe" },
+        @{ Source = "test/testSemantic.cpp"; Output = "build/testSemantic.exe" },
+        @{ Source = "test/testInterpreter.cpp"; Output = "build/testInterpreter.exe" }
     )
 
     foreach ($target in $targets) {
@@ -87,14 +89,16 @@ try {
     Write-Host ""
 
     $validExamples = @(
-        @{ Name = "valid"; Expected = "modules=3" },
-        @{ Name = "module_body"; Expected = "body_modules=2" }
+        @{ Name = "valid"; Expected = "modules=3"; Arguments = @() },
+        @{ Name = "module_body"; Expected = "body_modules=2"; Arguments = @() },
+        @{ Name = "execution"; Expected = "calls_executed=2"; Arguments = @("--run", "service.main") }
     )
 
     foreach ($example in $validExamples) {
         $path = ".\examples\$($example.Name).ieum"
         Write-Host "Run: build/ieum.exe $path"
-        $validOutput = & ".\build\ieum.exe" $path 2>&1
+        $arguments = @($path) + $example.Arguments
+        $validOutput = & ".\build\ieum.exe" @arguments 2>&1
         $validExitCode = $LASTEXITCODE
         $validText = $validOutput -join "`n"
         Write-Host $validText
@@ -107,12 +111,41 @@ try {
         Write-Host ""
     }
 
+    $runBoundaryCases = @(
+        @{ Entry = "service.missing"; ExpectedExit = 1; Expected = "service.missing" },
+        @{ Entry = "service.prepare"; ExpectedExit = 1; Expected = "service.prepare" },
+        @{ Entry = "service"; ExpectedExit = 2; Expected = "entry_format=module.function" }
+    )
+
+    foreach ($case in $runBoundaryCases) {
+        $path = ".\examples\execution.ieum"
+        Write-Host "Run: build/ieum.exe $path --run $($case.Entry)"
+        $savedErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $runOutput = & ".\build\ieum.exe" $path "--run" $case.Entry 2>&1
+        $runExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $savedErrorActionPreference
+        $runText = $runOutput -join "`n"
+        Write-Host $runText
+        if ($runExitCode -ne $case.ExpectedExit) {
+            throw "Expected --run $($case.Entry) to exit with $($case.ExpectedExit), got $runExitCode"
+        }
+        if (-not $runText.Contains($case.Expected)) {
+            throw "Expected output '$($case.Expected)' for --run $($case.Entry)"
+        }
+        Write-Host ""
+    }
+
     $invalidExamples = @(
         @{ Name = "implicit_dependency"; Expected = "notification" },
         @{ Name = "cyclic_dependency"; Expected = "order -> payment -> order" },
         @{ Name = "layer_violation"; Expected = "'data'" },
         @{ Name = "transitive_layer_violation"; Expected = "'data'" },
-        @{ Name = "invalid_declarations"; Expected = "'missing'" }
+        @{ Name = "invalid_declarations"; Expected = "'missing'" },
+        @{ Name = "semantic_undefined_function"; Expected = "missing" },
+        @{ Name = "semantic_arity_mismatch"; Expected = "helper" },
+        @{ Name = "semantic_missing_dependency"; Expected = "depends" },
+        @{ Name = "semantic_undefined_variable"; Expected = "missing" }
     )
 
     foreach ($example in $invalidExamples) {
@@ -123,7 +156,7 @@ try {
         $exampleText = $exampleOutput -join "`n"
         Write-Host $exampleText
         if ($exampleExitCode -eq 0) {
-            throw "Expected structural violation for $path"
+            throw "Expected validation violation for $path"
         }
         if ($exampleExitCode -ne 1) {
             throw "Expected exit code 1 for $path, got $exampleExitCode"

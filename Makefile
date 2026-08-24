@@ -12,16 +12,22 @@ TARGET = $(BUILD_DIR)/ieum$(EXE)
 TEST_PARSER = $(BUILD_DIR)/testParser$(EXE)
 TEST_PIPELINE = $(BUILD_DIR)/testPipeline$(EXE)
 TEST_CHECKER = $(BUILD_DIR)/testChecker$(EXE)
+TEST_SEMANTIC = $(BUILD_DIR)/testSemantic$(EXE)
+TEST_INTERPRETER = $(BUILD_DIR)/testInterpreter$(EXE)
 BENCHMARK_CHECKER = $(BUILD_DIR)/benchmarkChecker$(EXE)
 BENCHMARK_MODULES ?= 200
 BENCHMARK_ITERATIONS ?= 7
-HEADERS = src/token.h src/ast.h src/lexer.h src/parser.h src/checker.h src/version.h
+HEADERS = src/token.h src/ast.h src/lexer.h src/parser.h src/checker.h src/semantic.h src/interpreter.h src/version.h
 INVALID_EXAMPLES = \
 	examples/implicit_dependency.ieum \
 	examples/cyclic_dependency.ieum \
 	examples/layer_violation.ieum \
 	examples/transitive_layer_violation.ieum \
-	examples/invalid_declarations.ieum
+	examples/invalid_declarations.ieum \
+	examples/semantic_undefined_function.ieum \
+	examples/semantic_arity_mismatch.ieum \
+	examples/semantic_missing_dependency.ieum \
+	examples/semantic_undefined_variable.ieum
 VALID_EXAMPLES = \
 	examples/valid.ieum \
 	examples/module_body.ieum
@@ -43,26 +49,53 @@ $(TEST_PIPELINE): test/testPipeline.cpp $(HEADERS) | $(BUILD_DIR)
 $(TEST_CHECKER): test/testChecker.cpp $(HEADERS) | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@
 
+$(TEST_SEMANTIC): test/testSemantic.cpp $(HEADERS) | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@
+
+$(TEST_INTERPRETER): test/testInterpreter.cpp $(HEADERS) | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@
+
 $(BENCHMARK_CHECKER): benchmark/benchmarkChecker.cpp $(HEADERS) | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -O2 -DNDEBUG $< -o $@
 
 run: $(TARGET)
 	./$(TARGET) examples/valid.ieum
 
-test: $(TEST_PARSER) $(TEST_PIPELINE) $(TEST_CHECKER) $(TARGET) $(BENCHMARK_CHECKER)
+test: $(TEST_PARSER) $(TEST_PIPELINE) $(TEST_CHECKER) $(TEST_SEMANTIC) $(TEST_INTERPRETER) $(TARGET) $(BENCHMARK_CHECKER)
 	./$(TEST_PARSER)
 	./$(TEST_PIPELINE)
 	./$(TEST_CHECKER)
+	./$(TEST_SEMANTIC)
+	./$(TEST_INTERPRETER)
 	./$(BENCHMARK_CHECKER) 2 1
 	test "$$(./$(TARGET) --version)" = "ieum $(VERSION)"
 	@for example in $(VALID_EXAMPLES); do \
 		./$(TARGET) $$example || exit 1; \
 	done
+	./$(TARGET) examples/execution.ieum --run service.main
+	@./$(TARGET) examples/execution.ieum --run service.missing >/dev/null 2>&1; \
+		status=$$?; \
+		if [ $$status -ne 1 ]; then \
+			echo "Expected missing entry function to exit with 1, got $$status"; \
+			exit 1; \
+		fi
+	@./$(TARGET) examples/execution.ieum --run service.prepare >/dev/null 2>&1; \
+		status=$$?; \
+		if [ $$status -ne 1 ]; then \
+			echo "Expected parameterized entry function to exit with 1, got $$status"; \
+			exit 1; \
+		fi
+	@./$(TARGET) examples/execution.ieum --run service >/dev/null 2>&1; \
+		status=$$?; \
+		if [ $$status -ne 2 ]; then \
+			echo "Expected invalid entry format to exit with 2, got $$status"; \
+			exit 1; \
+		fi
 	@for example in $(INVALID_EXAMPLES); do \
 		./$(TARGET) $$example >/dev/null 2>&1; \
 		status=$$?; \
 		if [ $$status -eq 0 ]; then \
-			echo "Expected structural violation for $$example"; \
+			echo "Expected validation violation for $$example"; \
 			exit 1; \
 		fi; \
 		if [ $$status -ne 1 ]; then \

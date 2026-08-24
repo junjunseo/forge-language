@@ -4,8 +4,13 @@ foreach(required IN ITEMS IEUM_EXECUTABLE IEUM_SOURCE EXPECTED_EXIT EXPECTED_TEX
     endif()
 endforeach()
 
+set(command_arguments "${IEUM_SOURCE}")
+if(DEFINED IEUM_ENTRY AND NOT "${IEUM_ENTRY}" STREQUAL "")
+    list(APPEND command_arguments "--run" "${IEUM_ENTRY}")
+endif()
+
 execute_process(
-    COMMAND "${IEUM_EXECUTABLE}" "${IEUM_SOURCE}"
+    COMMAND "${IEUM_EXECUTABLE}" ${command_arguments}
     RESULT_VARIABLE actual_exit
     OUTPUT_VARIABLE standard_output
     ERROR_VARIABLE standard_error

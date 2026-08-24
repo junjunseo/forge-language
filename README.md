@@ -1,6 +1,6 @@
 # 이음(Ieum)
 
-구조적으로 잘못된 모듈 의존 관계를 실행 전에 거부하는 작은 프로그래밍 언어와 검사기입니다.
+구조적으로 잘못된 모듈 의존 관계와 이름·호출 오류를 실행 전에 거부하고, 검증된 함수 호출을 실행할 수 있는 작은 프로그래밍 언어입니다.
 
 공식 PoC 릴리스는 [`v0.1.0`](https://github.com/junjunseo/ieum/releases/tag/v0.1.0)이며 저장소 루트의 `VERSION`을 빌드 경로 전체가 공통으로 사용합니다.
 
@@ -12,6 +12,14 @@
 4. 선언되지 않은 모듈에 대한 의존 금지
 5. 모듈 사이의 순환 의존 금지
 6. 하위 계층에서 직접 또는 의존 경로를 통해 상위 계층으로 향하는 의존 금지
+
+모듈 본문에는 이름·Scope 규칙도 적용합니다.
+
+1. 모듈 변수·함수는 각 이름 공간에서, 매개변수·지역 변수는 함수 Scope에서 중복 선언 금지
+2. 선언되지 않은 변수를 호출 인자로 사용하는 행위 금지
+3. 현재 모듈 또는 직접 `depends` 모듈에 없는 함수 호출 금지
+4. 여러 의존 모듈에 같은 이름의 함수가 있는 모호한 호출 금지
+5. 함수 인자 개수 불일치와 종료 조건이 없는 재귀 호출 금지
 
 ## 문법
 
@@ -28,7 +36,7 @@ module <모듈 이름> [depends <의존 대상>] {
 layer <상위 계층> above <하위 계층>
 ```
 
-F1 모듈 본문은 변수·함수·호출 AST를 만들며 아직 실행하지 않습니다. 전체 EBNF와 줄 규칙은 [문법 문서](docs/GRAMMAR.md)를 참고합니다.
+식별자는 현재 unit 값으로 취급하며, 검사를 통과한 프로그램은 함수 호출 순서대로 실행할 수 있습니다. 전체 EBNF와 의미 규칙은 [문법 문서](docs/GRAMMAR.md)를 참고합니다.
 
 정상적인 구조의 예:
 
@@ -93,6 +101,7 @@ cmake --build build --config Release
 모듈 3개, 계층 선언 2개 (modules=3, layers=2)
 
 ✓ 구조 검사 통과: 위반 없음
+✓ 의미 검사 통과: 위반 없음
 ```
 
 모듈 본문 예제:
@@ -101,7 +110,15 @@ cmake --build build --config Release
 .\build\ieum.exe .\examples\module_body.ieum
 ```
 
-이 예제는 모듈 본문, 변수, 함수, 매개변수와 호출을 AST로 만들고 기존 구조 규칙도 함께 검사합니다.
+이 예제는 모듈 본문, 변수, 함수, 매개변수와 호출을 AST로 만들고 구조·의미 규칙을 함께 검사합니다.
+
+함수 호출 실행 예제:
+
+```powershell
+.\build\ieum.exe .\examples\execution.ieum --run service.main
+```
+
+`--run` 진입점은 `<모듈>.<함수>` 형식이며 매개변수가 없어야 합니다. 실행기는 `enter`, `call`, `exit` Trace와 실행한 함수·호출 수를 출력합니다.
 
 위반 예제:
 
@@ -111,9 +128,13 @@ cmake --build build --config Release
 .\build\ieum.exe .\examples\layer_violation.ieum
 .\build\ieum.exe .\examples\transitive_layer_violation.ieum
 .\build\ieum.exe .\examples\invalid_declarations.ieum
+.\build\ieum.exe .\examples\semantic_undefined_function.ieum
+.\build\ieum.exe .\examples\semantic_arity_mismatch.ieum
+.\build\ieum.exe .\examples\semantic_missing_dependency.ieum
+.\build\ieum.exe .\examples\semantic_undefined_variable.ieum
 ```
 
-구조 위반이 발견되면 오류 내용과 행을 출력하고 종료 코드 `1`을 반환합니다. 따라서 빌드 스크립트나 CI에서도 실패를 감지할 수 있습니다.
+구조 또는 의미 위반이 발견되면 오류 내용과 행을 출력하고 종료 코드 `1`을 반환합니다. 잘못된 CLI 사용과 파일 열기 실패는 종료 코드 `2`를 반환하므로 빌드 스크립트나 CI에서도 실패를 구분할 수 있습니다.
 
 ## 테스트
 
@@ -142,12 +163,15 @@ ctest --test-dir build -C Release --output-on-failure
 - 파서 단위 테스트 46개
 - Lexer → Parser → Checker 통합 테스트 35개
 - 구조 검사기 시나리오 테스트 31개
-- 총 112개 assert 기반 자동 테스트
+- 의미 분석기 테스트 26개
+- 최소 인터프리터 테스트 15개
+- 총 153개 assert 기반 자동 테스트
 - CLI 버전이 `VERSION`과 일치하는지 확인하는 테스트
-- 정상 예제 2개의 종료 코드 `0`과 위반 예제 5개의 종료 코드 `1`을 확인하는 smoke 테스트
+- 정상 예제 3개의 종료 코드 `0`과 위반 예제 9개의 종료 코드 `1`을 확인하는 smoke 테스트
+- 잘못된 실행 진입점 형식, 미정의 진입 함수와 매개변수가 있는 진입 함수의 CLI 종료 코드 검증
 - 예제별 대표 성공·위반 진단이 출력되는지 확인하는 테스트
 - 2개 모듈 합성 corpus로 성능 측정 경로를 확인하는 benchmark smoke 테스트
-- 정상 구조, 선언 오류, 주석·공백·BOM 입력, 미선언 의존, 직접·다단계·자기·복수 순환, 직접·전이적·간접 경로 계층 위반, 복합 위반 검증
+- 정상 구조, 선언 오류, 주석·공백·BOM 입력, 미선언 의존, 직접·다단계·자기·복수 순환, 계층 위반, Scope, 함수 해석, 인자 개수, 재귀와 실행 Trace 검증
 
 ## 성능 기준선
 
@@ -169,13 +193,13 @@ make benchmark BENCHMARK_MODULES=200 BENCHMARK_ITERATIONS=11
 
 ## CI
 
-GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, build, CTest를 실행합니다. CTest는 위의 112개 assert 기반 자동 테스트, CLI 버전 테스트, 7개 예제 smoke 테스트와 benchmark smoke 테스트를 함께 검증합니다.
+GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, build, CTest를 실행합니다. CTest는 위의 153개 assert 기반 자동 테스트, CLI 버전 테스트, 12개 예제 smoke 테스트, 실행 진입점 경계 조건과 benchmark smoke 테스트를 함께 검증합니다.
 
 새 환경에서 재현할 때는 다음 순서를 기준으로 확인합니다.
 
 1. `g++`, GNU Make 또는 CMake 설치 여부를 확인합니다.
 2. `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1` 또는 `ctest --test-dir build -C Release --output-on-failure`를 실행합니다.
-3. README의 시연 흐름에 있는 7개 예제가 문서와 같은 종료 코드로 동작하는지 확인합니다.
+3. README의 시연 흐름과 예제가 문서와 같은 종료 코드로 동작하는지 확인합니다.
 
 ## v0.1.0 릴리스
 
@@ -196,6 +220,8 @@ src/
   parser.h      구조 선언과 모듈 본문을 AST로 변환
   ast.h         모듈·계층·변수·함수·호출 자료구조
   checker.h     의존성과 계층 규칙 검사
+  semantic.h    이름·Scope·함수 호출 분석
+  interpreter.h 검증된 unit 함수 호출 실행과 Trace
   version.h     빌드 시스템이 전달한 버전 노출
   main.cpp      명령행 프로그램
 test/           자동 테스트
@@ -209,7 +235,7 @@ CHANGELOG.md    버전별 기능·제한 기록
 
 ## 현재 범위
 
-구조 검사 코어에 F1 모듈 본문 AST를 확장했습니다. 현재는 모듈 선언, 의존 선언, 계층 선언과 함께 모듈 변수, 함수, 매개변수, 지역 변수와 호출 문장을 파싱합니다. 구조 규칙은 계속 실행 전에 강제하지만 이름 해석, 호출 유효성 검사와 실행 백엔드는 F2 범위입니다.
+F2까지 구현되어 모듈 선언, 의존 선언, 계층 선언과 함께 변수, 함수, 매개변수, 지역 변수와 호출 문장을 검사하고 실행합니다. 함수 이름은 현재 모듈을 우선한 뒤 직접 `depends` 모듈에서 해석하며, 인자는 매개변수·앞서 선언한 지역 변수·모듈 변수 중 하나여야 합니다. 실행 값은 아직 unit뿐이며 리터럴, 연산, 반환문과 제어 흐름은 지원하지 않습니다.
 
 ## 2학기 로드맵
 
@@ -227,9 +253,9 @@ CHANGELOG.md    버전별 기능·제한 기록
 ## 시연 흐름
 
 1. `examples/valid.ieum`으로 올바른 구조가 통과함을 보입니다.
-2. `examples/module_body.ieum`으로 변수·함수·호출 AST와 구조 검사를 함께 보입니다.
-3. `examples/implicit_dependency.ieum`으로 선언되지 않은 모듈 의존을 거부함을 보입니다.
-4. `examples/cyclic_dependency.ieum`으로 순환 의존을 거부함을 보입니다.
-5. `examples/layer_violation.ieum`으로 계층 위반을 거부함을 보입니다.
-6. `examples/transitive_layer_violation.ieum`으로 여러 단계 계층 위반도 거부함을 보입니다.
-7. `examples/invalid_declarations.ieum`으로 중복 모듈, 미선언 계층 모듈, 자기 계층 선언을 거부함을 보입니다.
+2. `examples/module_body.ieum`으로 변수·함수·호출 AST와 의미 검사를 보입니다.
+3. `examples/execution.ieum --run service.main`으로 모듈 간 함수 호출 Trace를 보입니다.
+4. `examples/implicit_dependency.ieum`과 `examples/cyclic_dependency.ieum`으로 잘못된 의존을 거부함을 보입니다.
+5. `examples/layer_violation.ieum`과 `examples/transitive_layer_violation.ieum`으로 직접·전이 계층 위반을 거부함을 보입니다.
+6. `examples/invalid_declarations.ieum`으로 잘못된 구조 선언을 거부함을 보입니다.
+7. `examples/semantic_missing_dependency.ieum` 등 의미 위반 예제로 호출·Scope 오류를 거부함을 보입니다.
