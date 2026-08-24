@@ -44,12 +44,23 @@ add_ieum_executable(ieum src/main.cpp)
 add_ieum_executable(testParser test/testParser.cpp)
 add_ieum_executable(testPipeline test/testPipeline.cpp)
 add_ieum_executable(testChecker test/testChecker.cpp)
+add_ieum_executable(benchmarkChecker benchmark/benchmarkChecker.cpp)
+
+if(MSVC)
+    target_compile_options(benchmarkChecker PRIVATE /O2)
+else()
+    target_compile_options(benchmarkChecker PRIVATE -O2)
+endif()
 
 enable_testing()
 
 add_test(NAME parser COMMAND testParser)
 add_test(NAME pipeline COMMAND testPipeline)
 add_test(NAME checker COMMAND testChecker)
+add_test(NAME benchmark_smoke COMMAND benchmarkChecker 2 1)
+set_tests_properties(benchmark_smoke PROPERTIES
+    PASS_REGULAR_EXPRESSION "scenario=layered-valid-chain"
+)
 
 add_test(NAME cli_version COMMAND $<TARGET_FILE:ieum> --version)
 set_tests_properties(cli_version PROPERTIES

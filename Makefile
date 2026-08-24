@@ -12,6 +12,9 @@ TARGET = $(BUILD_DIR)/ieum$(EXE)
 TEST_PARSER = $(BUILD_DIR)/testParser$(EXE)
 TEST_PIPELINE = $(BUILD_DIR)/testPipeline$(EXE)
 TEST_CHECKER = $(BUILD_DIR)/testChecker$(EXE)
+BENCHMARK_CHECKER = $(BUILD_DIR)/benchmarkChecker$(EXE)
+BENCHMARK_MODULES ?= 200
+BENCHMARK_ITERATIONS ?= 7
 HEADERS = src/token.h src/ast.h src/lexer.h src/parser.h src/checker.h src/version.h
 INVALID_EXAMPLES = \
 	examples/implicit_dependency.ieum \
@@ -37,13 +40,17 @@ $(TEST_PIPELINE): test/testPipeline.cpp $(HEADERS) | $(BUILD_DIR)
 $(TEST_CHECKER): test/testChecker.cpp $(HEADERS) | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@
 
+$(BENCHMARK_CHECKER): benchmark/benchmarkChecker.cpp $(HEADERS) | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -O2 -DNDEBUG $< -o $@
+
 run: $(TARGET)
 	./$(TARGET) examples/valid.ieum
 
-test: $(TEST_PARSER) $(TEST_PIPELINE) $(TEST_CHECKER) $(TARGET)
+test: $(TEST_PARSER) $(TEST_PIPELINE) $(TEST_CHECKER) $(TARGET) $(BENCHMARK_CHECKER)
 	./$(TEST_PARSER)
 	./$(TEST_PIPELINE)
 	./$(TEST_CHECKER)
+	./$(BENCHMARK_CHECKER) 2 1
 	test "$$(./$(TARGET) --version)" = "ieum $(VERSION)"
 	./$(TARGET) examples/valid.ieum
 	@for example in $(INVALID_EXAMPLES); do \
@@ -59,7 +66,10 @@ test: $(TEST_PARSER) $(TEST_PIPELINE) $(TEST_CHECKER) $(TARGET)
 		fi; \
 	done
 
+benchmark: $(BENCHMARK_CHECKER)
+	./$(BENCHMARK_CHECKER) $(BENCHMARK_MODULES) $(BENCHMARK_ITERATIONS)
+
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all run test clean
+.PHONY: all run test benchmark clean
