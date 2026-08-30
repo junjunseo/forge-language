@@ -25,6 +25,8 @@ set(IEUM_HEADERS
     src/lexer.h
     src/parser.h
     src/checker.h
+    src/semantic.h
+    src/interpreter.h
     src/version.h
 )
 
@@ -44,6 +46,8 @@ add_ieum_executable(ieum src/main.cpp)
 add_ieum_executable(testParser test/testParser.cpp)
 add_ieum_executable(testPipeline test/testPipeline.cpp)
 add_ieum_executable(testChecker test/testChecker.cpp)
+add_ieum_executable(testSemantic test/testSemantic.cpp)
+add_ieum_executable(testInterpreter test/testInterpreter.cpp)
 add_ieum_executable(benchmarkChecker benchmark/benchmarkChecker.cpp)
 
 if(MSVC)
@@ -57,6 +61,8 @@ enable_testing()
 add_test(NAME parser COMMAND testParser)
 add_test(NAME pipeline COMMAND testPipeline)
 add_test(NAME checker COMMAND testChecker)
+add_test(NAME semantic COMMAND testSemantic)
+add_test(NAME interpreter COMMAND testInterpreter)
 add_test(NAME benchmark_smoke COMMAND benchmarkChecker 2 1)
 set_tests_properties(benchmark_smoke PROPERTIES
     PASS_REGULAR_EXPRESSION "scenario=layered-valid-chain"
@@ -79,10 +85,31 @@ function(add_ieum_example_test name expected_exit expected_text)
     )
 endfunction()
 
+function(add_ieum_run_test test_name source_name entry expected_exit expected_text)
+    add_test(
+        NAME ${test_name}
+        COMMAND ${CMAKE_COMMAND}
+            "-DIEUM_EXECUTABLE=$<TARGET_FILE:ieum>"
+            "-DIEUM_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/examples/${source_name}.ieum"
+            "-DIEUM_ENTRY=${entry}"
+            "-DEXPECTED_EXIT=${expected_exit}"
+            "-DEXPECTED_TEXT=${expected_text}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyExample.cmake"
+    )
+endfunction()
+
 add_ieum_example_test(valid 0 "")
 add_ieum_example_test(module_body 0 "body_modules=2")
+add_ieum_run_test(example_execution execution "service.main" 0 "calls_executed=2")
+add_ieum_run_test(cli_run_missing_function execution "service.missing" 1 "service.missing")
+add_ieum_run_test(cli_run_parameterized_entry execution "service.prepare" 1 "service.prepare")
+add_ieum_run_test(cli_run_invalid_entry execution "service" 2 "entry_format=module.function")
 add_ieum_example_test(implicit_dependency 1 "notification")
 add_ieum_example_test(cyclic_dependency 1 "order -> payment -> order")
 add_ieum_example_test(layer_violation 1 "'data'")
 add_ieum_example_test(transitive_layer_violation 1 "'data'")
 add_ieum_example_test(invalid_declarations 1 "'missing'")
+add_ieum_example_test(semantic_undefined_function 1 "missing")
+add_ieum_example_test(semantic_arity_mismatch 1 "helper")
+add_ieum_example_test(semantic_missing_dependency 1 "depends")
+add_ieum_example_test(semantic_undefined_variable 1 "missing")

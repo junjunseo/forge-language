@@ -1,0 +1,11 @@
+module data {
+  fn save(item) {}
+}
+
+module service {
+  let item
+
+  fn main() {
+    call save(item)
+  }
+}

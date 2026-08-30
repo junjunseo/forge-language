@@ -7,10 +7,12 @@
 #include "lexer.h"
 #include "parser.h"
 #include "checker.h"
+#include "semantic.h"
+#include "interpreter.h"
 #include "version.h"
 
 // 위반 종류 → 사람이 읽는 라벨
-static std::string kindLabel(Violation::Kind k) {
+static std::string structuralKindLabel(Violation::Kind k) {
     switch (k) {
         case Violation::Kind::DuplicateModule:      return "중복 모듈";
         case Violation::Kind::UndefinedLayerModule: return "미선언 계층 모듈";
@@ -18,6 +20,22 @@ static std::string kindLabel(Violation::Kind k) {
         case Violation::Kind::ImplicitDependency: return "암묵적 의존";
         case Violation::Kind::CyclicDependency:   return "순환 의존";
         case Violation::Kind::LayerViolation:     return "계층 위반";
+    }
+    return "알 수 없음";
+}
+
+static std::string semanticKindLabel(SemanticViolationKind kind) {
+    switch (kind) {
+        case SemanticViolationKind::DuplicateModuleVariable: return "중복 모듈 변수";
+        case SemanticViolationKind::DuplicateFunction:       return "중복 함수";
+        case SemanticViolationKind::DuplicateParameter:      return "중복 매개변수";
+        case SemanticViolationKind::DuplicateLocalVariable:  return "중복 지역 변수";
+        case SemanticViolationKind::UndefinedVariable:       return "미정의 변수";
+        case SemanticViolationKind::UndefinedFunction:       return "미정의 함수";
+        case SemanticViolationKind::AmbiguousFunction:       return "모호한 함수";
+        case SemanticViolationKind::MissingCallDependency:   return "호출 의존 누락";
+        case SemanticViolationKind::ArityMismatch:            return "인자 개수 불일치";
+        case SemanticViolationKind::RecursiveCall:            return "재귀 호출";
     }
     return "알 수 없음";
 }
@@ -42,15 +60,69 @@ static BodySummary summarizeBodies(const Program& program) {
     return summary;
 }
 
+static bool parseEntryPoint(
+    const std::string& text,
+    std::string& module,
+    std::string& function) {
+    const std::size_t dot = text.find('.');
+    if (dot == std::string::npos || dot == 0 || dot + 1 >= text.size()) {
+        return false;
+    }
+    if (text.find('.', dot + 1) != std::string::npos) return false;
+
+    module = text.substr(0, dot);
+    function = text.substr(dot + 1);
+    return true;
+}
+
+static void printUsage() {
+    std::cerr << "사용법: ieum <소스파일.ieum>\n"
+              << "       ieum <소스파일.ieum> --run <모듈>.<함수>\n"
+              << "       ieum --version\n";
+}
+
+static void printExecutionTrace(const ExecutionResult& execution) {
+    std::cout << "── 실행 Trace ──\n";
+    for (const auto& event : execution.events) {
+        const std::string indent(event.depth * 2, ' ');
+        switch (event.kind) {
+            case ExecutionEventKind::EnterFunction:
+                std::cout << indent << "enter " << event.function << "\n";
+                break;
+            case ExecutionEventKind::CallFunction:
+                std::cout << indent << "call " << event.target;
+                if (event.line > 0) std::cout << " (" << event.line << "행)";
+                std::cout << "\n";
+                break;
+            case ExecutionEventKind::ExitFunction:
+                std::cout << indent << "exit " << event.function << "\n";
+                break;
+        }
+    }
+    std::cout << "\n✓ 실행 완료: 함수 " << execution.functionsExecuted
+              << "회, 호출 " << execution.callsExecuted
+              << "회 (functions_executed=" << execution.functionsExecuted
+              << ", calls_executed=" << execution.callsExecuted << ")\n";
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]) == "--version") {
         std::cout << "ieum " << kIeumVersion << "\n";
         return 0;
     }
 
-    if (argc < 2) {
-        std::cerr << "사용법: ieum <소스파일.ieum>\n"
-                  << "       ieum --version\n";
+    bool shouldRun = false;
+    std::string entryModule;
+    std::string entryFunction;
+    if (argc == 4 && std::string(argv[2]) == "--run") {
+        shouldRun = true;
+        if (!parseEntryPoint(argv[3], entryModule, entryFunction)) {
+            std::cerr << "오류: 실행 진입점은 <모듈>.<함수> 형식이어야 합니다 "
+                      << "(entry_format=module.function)\n";
+            return 2;
+        }
+    } else if (argc != 2) {
+        printUsage();
         return 2;
     }
 
@@ -94,20 +166,52 @@ int main(int argc, char** argv) {
         Checker checker(prog);
         auto violations = checker.check();
 
-        if (violations.empty()) {
-            std::cout << "✓ 구조 검사 통과: 위반 없음\n";
-            return 0;
+        if (!violations.empty()) {
+            std::cout << "✗ 구조 검사 실패: 위반 " << violations.size() << "건\n\n";
+            for (const auto& violation : violations) {
+                std::cout << "  [" << structuralKindLabel(violation.kind) << "] "
+                          << violation.message;
+                if (violation.line > 0) {
+                    std::cout << " (" << violation.line << "행)";
+                }
+                std::cout << "\n";
+            }
+            return 1;
+        }
+        std::cout << "✓ 구조 검사 통과: 위반 없음\n";
+
+        // 5) 이름·Scope·함수 호출 의미 검사
+        SemanticAnalyzer analyzer(prog);
+        const SemanticResult semantics = analyzer.analyze();
+        if (!semantics.ok()) {
+            std::cout << "\n✗ 의미 검사 실패: 위반 "
+                      << semantics.violations.size() << "건\n\n";
+            for (const auto& violation : semantics.violations) {
+                std::cout << "  [" << semanticKindLabel(violation.kind) << "] "
+                          << violation.message;
+                if (violation.line > 0) {
+                    std::cout << " (" << violation.line << "행)";
+                }
+                std::cout << "\n";
+            }
+            return 1;
+        }
+        std::cout << "✓ 의미 검사 통과: 위반 없음\n";
+
+        if (!shouldRun) return 0;
+
+        // 6) unit 값만 사용하는 최소 함수 호출 실행
+        Interpreter interpreter(prog, semantics);
+        const ExecutionResult execution =
+            interpreter.run(entryModule, entryFunction);
+        if (!execution.success) {
+            std::cout << "\n✗ 실행 실패: " << execution.error << "\n";
+            return 1;
         }
 
-        std::cout << "✗ 구조 검사 실패: 위반 " << violations.size() << "건\n\n";
-        for (const auto& v : violations) {
-            std::cout << "  [" << kindLabel(v.kind) << "] "
-                      << v.message;
-            if (v.line > 0) std::cout << " (" << v.line << "행)";
-            std::cout << "\n";
-        }
-        // 위반 시 비-0 종료: 빌드/CI에서 실패로 드러난다
-        return 1;
+        std::cout << "\n";
+        printExecutionTrace(execution);
+        return 0;
 
     } catch (const std::exception& e) {
         std::cerr << e.what() << "\n";

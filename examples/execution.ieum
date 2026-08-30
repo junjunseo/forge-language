@@ -1,0 +1,17 @@
+# F2 unit-value execution example
+module data {
+  fn save(item) {}
+}
+
+module service depends data {
+  fn prepare(item) {
+    call save(item)
+  }
+
+  fn main() {
+    let unit
+    call prepare(unit)
+  }
+}
+
+layer service above data
