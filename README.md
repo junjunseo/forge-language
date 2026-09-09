@@ -120,6 +120,14 @@ cmake --build build --config Release
 
 `--run` 진입점은 `<모듈>.<함수>` 형식이며 매개변수가 없어야 합니다. 실행기는 `enter`, `call`, `exit` Trace와 실행한 함수·호출 수를 출력합니다.
 
+의존 그래프 DOT 내보내기:
+
+```powershell
+.\build\ieum.exe .\examples\cyclic_dependency.ieum --emit-dot .\build\cyclic.dot
+```
+
+검사 성공 여부와 관계없이 파싱된 모듈·의존·계층 관계를 DOT 파일로 저장합니다. 정상 의존은 파란 실선, 계층은 회색 점선, 순환·계층 위반 경로와 잘못된 선언은 빨간색으로 표시합니다. 출력 순서는 고정되므로 스냅샷 비교에 사용할 수 있습니다. Graphviz가 설치되어 있다면 `dot -Tsvg .\build\cyclic.dot -o .\build\cyclic.svg`로 렌더링할 수 있습니다. 그래프 저장 실패는 경고를 출력하지만 구조 검사 종료 코드는 바꾸지 않습니다. 자세한 형식은 [그래프 출력 문서](docs/GRAPH_EXPORT.md)를 참고합니다.
+
 위반 예제:
 
 ```powershell
@@ -162,15 +170,17 @@ ctest --test-dir build -C Release --output-on-failure
 
 - 파서 단위 테스트 46개
 - Lexer → Parser → Checker 통합 테스트 35개
-- 구조 검사기 시나리오 테스트 31개
+- 구조 검사기 시나리오 테스트 35개
+- 의존 그래프 생성기 테스트 14개
 - 의미 분석기 테스트 26개
 - 최소 인터프리터 테스트 15개
-- 총 153개 assert 기반 자동 테스트
+- 총 171개 assert 기반 자동 테스트
 - CLI 버전이 `VERSION`과 일치하는지 확인하는 테스트
 - 정상 예제 3개의 종료 코드 `0`과 위반 예제 9개의 종료 코드 `1`을 확인하는 smoke 테스트
 - 잘못된 실행 진입점 형식, 미정의 진입 함수와 매개변수가 있는 진입 함수의 CLI 종료 코드 검증
 - 예제별 대표 성공·위반 진단이 출력되는지 확인하는 테스트
 - 2개 모듈 합성 corpus로 성능 측정 경로를 확인하는 benchmark smoke 테스트
+- 대표 예제 6종의 결정적 DOT 스냅샷과 그래프 저장 실패 격리 테스트
 - 정상 구조, 선언 오류, 주석·공백·BOM 입력, 미선언 의존, 직접·다단계·자기·복수 순환, 계층 위반, Scope, 함수 해석, 인자 개수, 재귀와 실행 Trace 검증
 
 ## 성능 기준선
@@ -193,7 +203,7 @@ make benchmark BENCHMARK_MODULES=200 BENCHMARK_ITERATIONS=11
 
 ## CI
 
-GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, build, CTest를 실행합니다. CTest는 위의 153개 assert 기반 자동 테스트, CLI 버전 테스트, 12개 예제 smoke 테스트, 실행 진입점 경계 조건과 benchmark smoke 테스트를 함께 검증합니다.
+GitHub Actions는 `ubuntu-latest`와 `windows-latest`에서 CMake configure, build, CTest를 실행합니다. CTest는 위의 171개 assert 기반 자동 테스트, CLI 버전 테스트, 12개 예제 smoke 테스트, 실행 진입점 경계 조건, 6개 DOT 스냅샷과 benchmark smoke 테스트를 함께 검증합니다.
 
 새 환경에서 재현할 때는 다음 순서를 기준으로 확인합니다.
 
@@ -220,6 +230,7 @@ src/
   parser.h      구조 선언과 모듈 본문을 AST로 변환
   ast.h         모듈·계층·변수·함수·호출 자료구조
   checker.h     의존성과 계층 규칙 검사
+  graph.h       결정적 DOT 그래프와 위반 경로 강조
   semantic.h    이름·Scope·함수 호출 분석
   interpreter.h 검증된 unit 함수 호출 실행과 Trace
   version.h     빌드 시스템이 전달한 버전 노출
@@ -235,7 +246,7 @@ CHANGELOG.md    버전별 기능·제한 기록
 
 ## 현재 범위
 
-F2까지 구현되어 모듈 선언, 의존 선언, 계층 선언과 함께 변수, 함수, 매개변수, 지역 변수와 호출 문장을 검사하고 실행합니다. 함수 이름은 현재 모듈을 우선한 뒤 직접 `depends` 모듈에서 해석하며, 인자는 매개변수·앞서 선언한 지역 변수·모듈 변수 중 하나여야 합니다. 실행 값은 아직 unit뿐이며 리터럴, 연산, 반환문과 제어 흐름은 지원하지 않습니다.
+F3까지 구현되어 모듈 선언, 의존 선언, 계층 선언과 함께 변수, 함수, 매개변수, 지역 변수와 호출 문장을 검사하고 실행하며 의존 그래프를 DOT으로 내보냅니다. 함수 이름은 현재 모듈을 우선한 뒤 직접 `depends` 모듈에서 해석하며, 인자는 매개변수·앞서 선언한 지역 변수·모듈 변수 중 하나여야 합니다. 실행 값은 아직 unit뿐이며 리터럴, 연산, 반환문과 제어 흐름은 지원하지 않습니다.
 
 ## 2학기 로드맵
 

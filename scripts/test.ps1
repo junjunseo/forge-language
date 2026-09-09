@@ -27,6 +27,7 @@ try {
         @{ Source = "test/testParser.cpp";   Output = "build/testParser.exe" },
         @{ Source = "test/testPipeline.cpp"; Output = "build/testPipeline.exe" },
         @{ Source = "test/testChecker.cpp";  Output = "build/testChecker.exe" },
+        @{ Source = "test/testGraph.cpp";    Output = "build/testGraph.exe" },
         @{ Source = "test/testSemantic.cpp"; Output = "build/testSemantic.exe" },
         @{ Source = "test/testInterpreter.cpp"; Output = "build/testInterpreter.exe" }
     )
@@ -163,6 +164,67 @@ try {
         }
         if (-not $exampleText.Contains($example.Expected)) {
             throw "Expected output '$($example.Expected)' for $path"
+        }
+        Write-Host ""
+    }
+
+    $graphCases = @(
+        @{ Name = "valid"; ExpectedExit = 0 },
+        @{ Name = "implicit_dependency"; ExpectedExit = 1 },
+        @{ Name = "cyclic_dependency"; ExpectedExit = 1 },
+        @{ Name = "layer_violation"; ExpectedExit = 1 },
+        @{ Name = "transitive_layer_violation"; ExpectedExit = 1 },
+        @{ Name = "invalid_declarations"; ExpectedExit = 1 }
+    )
+    $graphOutputDirectory = "build/graph-tests"
+    New-Item -ItemType Directory -Force -Path $graphOutputDirectory | Out-Null
+
+    foreach ($case in $graphCases) {
+        $sourcePath = ".\examples\$($case.Name).ieum"
+        $actualPath = Join-Path $graphOutputDirectory "$($case.Name).dot"
+        $expectedPath = ".\test\snapshots\$($case.Name).dot"
+        Write-Host "Run: build/ieum.exe $sourcePath --emit-dot $actualPath"
+
+        $savedErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $graphOutput = & ".\build\ieum.exe" $sourcePath "--emit-dot" $actualPath 2>&1
+        $graphExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $savedErrorActionPreference
+        Write-Host ($graphOutput -join "`n")
+
+        if ($graphExitCode -ne $case.ExpectedExit) {
+            throw "Expected graph command for $sourcePath to exit with $($case.ExpectedExit), got $graphExitCode"
+        }
+
+        $actualGraph = (Get-Content -LiteralPath $actualPath -Raw) -replace "`r`n", "`n"
+        $expectedGraph = (Get-Content -LiteralPath $expectedPath -Raw) -replace "`r`n", "`n"
+        if ($actualGraph -cne $expectedGraph) {
+            throw "Graph snapshot mismatch for $sourcePath"
+        }
+        Write-Host "Graph snapshot matched: $expectedPath"
+        Write-Host ""
+    }
+
+    $graphFailureCases = @(
+        @{ Name = "valid"; ExpectedExit = 0 },
+        @{ Name = "cyclic_dependency"; ExpectedExit = 1 }
+    )
+    foreach ($case in $graphFailureCases) {
+        $sourcePath = ".\examples\$($case.Name).ieum"
+        Write-Host "Run graph failure isolation: $sourcePath"
+        $savedErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $failureOutput = & ".\build\ieum.exe" $sourcePath "--emit-dot" ".\build" 2>&1
+        $failureExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $savedErrorActionPreference
+        $failureText = $failureOutput -join "`n"
+        Write-Host $failureText
+
+        if ($failureExitCode -ne $case.ExpectedExit) {
+            throw "Graph export failure changed validation exit for $sourcePath"
+        }
+        if (-not $failureText.Contains("graph_export=failed")) {
+            throw "Graph export failure warning was not printed for $sourcePath"
         }
         Write-Host ""
     }

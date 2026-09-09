@@ -36,6 +36,27 @@ bool hasViolationLine(const std::vector<Violation>& violations,
     return false;
 }
 
+bool hasViolationPath(const std::vector<Violation>& violations,
+                      Violation::Kind kind,
+                      const std::vector<std::string>& expected) {
+    for (const auto& violation : violations) {
+        if (violation.kind == kind && violation.path == expected) return true;
+    }
+    return false;
+}
+
+bool hasMessageText(const std::vector<Violation>& violations,
+                    Violation::Kind kind,
+                    const std::string& expected) {
+    for (const auto& violation : violations) {
+        if (violation.kind == kind &&
+            violation.message.find(expected) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void assertTrue(bool condition, const std::string& name) {
     if (condition) {
         std::cout << "[PASS] " << name << "\n";
@@ -99,6 +120,11 @@ int main() {
         const auto violations = check("module ui depends missing\n");
         assertTrue(countKind(violations, Violation::Kind::ImplicitDependency) == 1,
                    "detects one undefined dependency target");
+        assertTrue(hasViolationPath(
+                       violations,
+                       Violation::Kind::ImplicitDependency,
+                       {"ui", "missing"}),
+                   "records undefined dependency path");
     }
 
     {
@@ -121,6 +147,11 @@ int main() {
             "module b depends a\n");
         assertTrue(hasViolationLine(violations, Violation::Kind::CyclicDependency, 2),
                    "reports cycle at closing dependency line");
+        assertTrue(hasViolationPath(
+                       violations,
+                       Violation::Kind::CyclicDependency,
+                       {"a", "b", "a"}),
+                   "records complete cyclic dependency path");
     }
 
     {
@@ -210,6 +241,16 @@ int main() {
             "layer ui above data\n");
         assertTrue(hasViolationLine(violations, Violation::Kind::LayerViolation, 3),
                    "reports indirect layer violation at lower module line");
+        assertTrue(hasViolationPath(
+                       violations,
+                       Violation::Kind::LayerViolation,
+                       {"data", "helper", "ui"}),
+                   "records indirect upward dependency path");
+        assertTrue(hasMessageText(
+                       violations,
+                       Violation::Kind::LayerViolation,
+                       "data -> helper -> ui"),
+                   "prints the same indirect path used by graph output");
     }
 
     {
@@ -328,7 +369,7 @@ int main() {
                    "keeps first module declaration as graph source after duplicate");
     }
 
-    assertTestCount(31);
+    assertTestCount(35);
 
     std::cout << "\nChecker tests: " << passed << " passed, "
               << failed << " failed\n";

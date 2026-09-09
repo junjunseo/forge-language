@@ -12,12 +12,13 @@ TARGET = $(BUILD_DIR)/ieum$(EXE)
 TEST_PARSER = $(BUILD_DIR)/testParser$(EXE)
 TEST_PIPELINE = $(BUILD_DIR)/testPipeline$(EXE)
 TEST_CHECKER = $(BUILD_DIR)/testChecker$(EXE)
+TEST_GRAPH = $(BUILD_DIR)/testGraph$(EXE)
 TEST_SEMANTIC = $(BUILD_DIR)/testSemantic$(EXE)
 TEST_INTERPRETER = $(BUILD_DIR)/testInterpreter$(EXE)
 BENCHMARK_CHECKER = $(BUILD_DIR)/benchmarkChecker$(EXE)
 BENCHMARK_MODULES ?= 200
 BENCHMARK_ITERATIONS ?= 7
-HEADERS = src/token.h src/ast.h src/lexer.h src/parser.h src/checker.h src/semantic.h src/interpreter.h src/version.h
+HEADERS = src/token.h src/ast.h src/lexer.h src/parser.h src/checker.h src/graph.h src/semantic.h src/interpreter.h src/version.h
 INVALID_EXAMPLES = \
 	examples/implicit_dependency.ieum \
 	examples/cyclic_dependency.ieum \
@@ -49,6 +50,9 @@ $(TEST_PIPELINE): test/testPipeline.cpp $(HEADERS) | $(BUILD_DIR)
 $(TEST_CHECKER): test/testChecker.cpp $(HEADERS) | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@
 
+$(TEST_GRAPH): test/testGraph.cpp $(HEADERS) | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@
+
 $(TEST_SEMANTIC): test/testSemantic.cpp $(HEADERS) | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< -o $@
 
@@ -61,10 +65,11 @@ $(BENCHMARK_CHECKER): benchmark/benchmarkChecker.cpp $(HEADERS) | $(BUILD_DIR)
 run: $(TARGET)
 	./$(TARGET) examples/valid.ieum
 
-test: $(TEST_PARSER) $(TEST_PIPELINE) $(TEST_CHECKER) $(TEST_SEMANTIC) $(TEST_INTERPRETER) $(TARGET) $(BENCHMARK_CHECKER)
+test: $(TEST_PARSER) $(TEST_PIPELINE) $(TEST_CHECKER) $(TEST_GRAPH) $(TEST_SEMANTIC) $(TEST_INTERPRETER) $(TARGET) $(BENCHMARK_CHECKER)
 	./$(TEST_PARSER)
 	./$(TEST_PIPELINE)
 	./$(TEST_CHECKER)
+	./$(TEST_GRAPH)
 	./$(TEST_SEMANTIC)
 	./$(TEST_INTERPRETER)
 	./$(BENCHMARK_CHECKER) 2 1
