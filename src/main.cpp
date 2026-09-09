@@ -7,6 +7,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "checker.h"
+#include "graph.h"
 #include "semantic.h"
 #include "interpreter.h"
 #include "version.h"
@@ -75,10 +76,68 @@ static bool parseEntryPoint(
     return true;
 }
 
+struct CliOptions {
+    std::string sourcePath;
+    bool shouldRun = false;
+    std::string entryModule;
+    std::string entryFunction;
+    bool shouldEmitDot = false;
+    std::string dotPath;
+};
+
 static void printUsage() {
     std::cerr << "사용법: ieum <소스파일.ieum>\n"
               << "       ieum <소스파일.ieum> --run <모듈>.<함수>\n"
+              << "       ieum <소스파일.ieum> --emit-dot <출력파일.dot>\n"
+              << "       ieum <소스파일.ieum> --run <모듈>.<함수> --emit-dot <출력파일.dot>\n"
               << "       ieum --version\n";
+}
+
+static bool parseCliOptions(int argc, char** argv, CliOptions& options) {
+    if (argc < 2) return false;
+    options.sourcePath = argv[1];
+
+    for (int i = 2; i < argc;) {
+        const std::string option = argv[i];
+        if (option == "--run") {
+            if (options.shouldRun || i + 1 >= argc) return false;
+            options.shouldRun = true;
+            if (!parseEntryPoint(
+                    argv[i + 1], options.entryModule, options.entryFunction)) {
+                std::cerr << "오류: 실행 진입점은 <모듈>.<함수> 형식이어야 합니다 "
+                          << "(entry_format=module.function)\n";
+                return false;
+            }
+            i += 2;
+            continue;
+        }
+        if (option == "--emit-dot") {
+            if (options.shouldEmitDot || i + 1 >= argc ||
+                std::string(argv[i + 1]).empty()) {
+                return false;
+            }
+            options.shouldEmitDot = true;
+            options.dotPath = argv[i + 1];
+            i += 2;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+static bool writeDotFile(
+    const std::string& path,
+    const Program& program,
+    const std::vector<Violation>& violations) {
+    try {
+        std::ofstream output(path, std::ios::binary);
+        if (!output) return false;
+        output << DependencyGraphExporter::toDot(program, violations);
+        return output.good();
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 static void printExecutionTrace(const ExecutionResult& execution) {
@@ -111,25 +170,16 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    bool shouldRun = false;
-    std::string entryModule;
-    std::string entryFunction;
-    if (argc == 4 && std::string(argv[2]) == "--run") {
-        shouldRun = true;
-        if (!parseEntryPoint(argv[3], entryModule, entryFunction)) {
-            std::cerr << "오류: 실행 진입점은 <모듈>.<함수> 형식이어야 합니다 "
-                      << "(entry_format=module.function)\n";
-            return 2;
-        }
-    } else if (argc != 2) {
+    CliOptions options;
+    if (!parseCliOptions(argc, argv, options)) {
         printUsage();
         return 2;
     }
 
     // 1) 파일 읽기
-    std::ifstream file(argv[1]);
+    std::ifstream file(options.sourcePath);
     if (!file) {
-        std::cerr << "오류: 파일을 열 수 없습니다 — " << argv[1] << "\n";
+        std::cerr << "오류: 파일을 열 수 없습니다 — " << options.sourcePath << "\n";
         return 2;
     }
     std::stringstream buffer;
@@ -166,6 +216,17 @@ int main(int argc, char** argv) {
         Checker checker(prog);
         auto violations = checker.check();
 
+        if (options.shouldEmitDot) {
+            if (writeDotFile(options.dotPath, prog, violations)) {
+                std::cout << "✓ 의존 그래프 저장: " << options.dotPath
+                          << " (graph_format=dot)\n\n";
+            } else {
+                std::cerr << "경고: 의존 그래프를 저장할 수 없습니다 — "
+                          << options.dotPath
+                          << " (graph_export=failed, 구조 검사 결과에는 영향 없음)\n";
+            }
+        }
+
         if (!violations.empty()) {
             std::cout << "✗ 구조 검사 실패: 위반 " << violations.size() << "건\n\n";
             for (const auto& violation : violations) {
@@ -198,12 +259,12 @@ int main(int argc, char** argv) {
         }
         std::cout << "✓ 의미 검사 통과: 위반 없음\n";
 
-        if (!shouldRun) return 0;
+        if (!options.shouldRun) return 0;
 
         // 6) unit 값만 사용하는 최소 함수 호출 실행
         Interpreter interpreter(prog, semantics);
         const ExecutionResult execution =
-            interpreter.run(entryModule, entryFunction);
+            interpreter.run(options.entryModule, options.entryFunction);
         if (!execution.success) {
             std::cout << "\n✗ 실행 실패: " << execution.error << "\n";
             return 1;

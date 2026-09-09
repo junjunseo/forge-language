@@ -13,7 +13,11 @@
 - 검증된 unit 함수 호출을 실행하는 최소 인터프리터와 실행 Trace
 - `ieum <source> --run <module>.<function>` 실행 인터페이스
 - 의미 분석 정상·위반 예제와 모듈 간 실행 예제
-- Parser 46개, Pipeline 35개, Checker 31개, Semantic 26개, Interpreter 15개로 총 153개 assert 테스트
+- `--emit-dot <파일>` 의존·계층 그래프 내보내기
+- 순환·계층 위반 의존 경로와 잘못된 선언의 DOT 강조
+- 선언 순서와 무관한 결정적 그래프 출력 및 대표 예제 6종 스냅샷 검증
+- 그래프 파일 저장 실패가 구조 검사 결과를 바꾸지 않는 실패 격리
+- Parser 46개, Pipeline 35개, Checker 35개, Graph 14개, Semantic 26개, Interpreter 15개로 총 171개 assert 테스트
 
 ### 현재 제한
 

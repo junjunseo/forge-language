@@ -30,6 +30,8 @@ struct Violation {
     Kind kind;
     std::string message;
     int line;
+    // 위반을 만드는 의존 경로. 그래프 출력과 진단이 같은 근거를 공유한다.
+    std::vector<std::string> path;
 };
 
 class Checker {
@@ -85,7 +87,8 @@ private:
                     Violation::Kind::DuplicateModule,
                     "모듈 '" + m.name + "'가 중복 선언되었습니다"
                         " (최초 선언: " + std::to_string(it->second) + "행)",
-                    m.line
+                    m.line,
+                    {}
                 });
             }
         }
@@ -98,7 +101,8 @@ private:
                     Violation::Kind::UndefinedLayerModule,
                     "계층 선언이 존재하지 않는 모듈 '" + layer.upper +
                         "'을 참조합니다",
-                    layer.line
+                    layer.line,
+                    {}
                 });
             }
             if (declared_.find(layer.lower) == declared_.end()) {
@@ -106,7 +110,8 @@ private:
                     Violation::Kind::UndefinedLayerModule,
                     "계층 선언이 존재하지 않는 모듈 '" + layer.lower +
                         "'을 참조합니다",
-                    layer.line
+                    layer.line,
+                    {}
                 });
             }
         }
@@ -119,7 +124,8 @@ private:
                     Violation::Kind::SelfLayer,
                     "계층 선언의 상위와 하위에 동일한 모듈 '" +
                         layer.upper + "'가 지정되었습니다",
-                    layer.line
+                    layer.line,
+                    {}
                 });
             }
         }
@@ -134,7 +140,8 @@ private:
                         Violation::Kind::ImplicitDependency,
                         "모듈 '" + m.name + "'가 선언되지 않은 모듈 '" + dep +
                             "'에 의존합니다",
-                        m.line
+                        m.line,
+                        {m.name, dep}
                     });
                 }
             }
@@ -170,16 +177,22 @@ private:
                 if (inStack.find(dep) != inStack.end()) {
                     // 사이클 발견: path에서 dep부터 끝까지가 사이클
                     std::string cycle;
+                    std::vector<std::string> cyclePath;
                     bool start = false;
                     for (const auto& n : path) {
                         if (n == dep) start = true;
-                        if (start) cycle += n + " -> ";
+                        if (start) {
+                            cycle += n + " -> ";
+                            cyclePath.push_back(n);
+                        }
                     }
                     cycle += dep;
+                    cyclePath.push_back(dep);
                     out.push_back({
                         Violation::Kind::CyclicDependency,
                         "순환 의존 발견: " + cycle,
-                        moduleLine_.count(node) ? moduleLine_[node] : 0
+                        moduleLine_.count(node) ? moduleLine_[node] : 0,
+                        cyclePath
                     });
                 } else if (visited.find(dep) == visited.end()) {
                     dfs(dep, visited, inStack, path, out);
@@ -204,7 +217,8 @@ private:
                         Violation::Kind::LayerViolation,
                         "계층 위반: 하위 계층 '" + module +
                             "'가 상위 계층 '" + dep + "'에 의존합니다",
-                        moduleLine_.count(module) ? moduleLine_[module] : 0
+                        moduleLine_.count(module) ? moduleLine_[module] : 0,
+                        {module, dep}
                     });
                 }
             }
@@ -212,14 +226,16 @@ private:
             for (const auto& candidateUpper : declared_) {
                 if (hasDirectDependency(module, candidateUpper)) continue;
                 if (!isUpperLayerOf(candidateUpper, module, parents)) continue;
-                if (!hasDependencyPath(module, candidateUpper)) continue;
+                const auto dependencyPath = findDependencyPath(module, candidateUpper);
+                if (dependencyPath.empty()) continue;
 
                 out.push_back({
                     Violation::Kind::LayerViolation,
                     "계층 위반: 하위 계층 '" + module +
                         "'가 의존 경로를 통해 상위 계층 '" + candidateUpper +
-                        "'에 의존합니다",
-                    moduleLine_.count(module) ? moduleLine_[module] : 0
+                        "'에 의존합니다 (경로: " + joinPath(dependencyPath) + ")",
+                    moduleLine_.count(module) ? moduleLine_[module] : 0,
+                    dependencyPath
                 });
             }
         }
@@ -276,28 +292,49 @@ private:
         return false;
     }
 
-    bool hasDependencyPath(const std::string& from,
-                           const std::string& target) const {
+    std::vector<std::string> findDependencyPath(
+        const std::string& from,
+        const std::string& target) const {
         std::unordered_set<std::string> visited;
-        return reachesDependencyTarget(from, target, visited);
+        std::vector<std::string> path;
+        if (buildDependencyPath(from, target, visited, path)) return path;
+        return {};
     }
 
-    bool reachesDependencyTarget(
+    bool buildDependencyPath(
         const std::string& current,
         const std::string& target,
-        std::unordered_set<std::string>& visited) const {
+        std::unordered_set<std::string>& visited,
+        std::vector<std::string>& path) const {
         if (!visited.insert(current).second) return false;
+        path.push_back(current);
 
         auto it = graph_.find(current);
-        if (it == graph_.end()) return false;
+        if (it == graph_.end()) {
+            path.pop_back();
+            return false;
+        }
 
         for (const auto& dep : it->second) {
             if (declared_.find(dep) == declared_.end()) continue;
-            if (dep == target) return true;
-            if (reachesDependencyTarget(dep, target, visited)) return true;
+            if (dep == target) {
+                path.push_back(dep);
+                return true;
+            }
+            if (buildDependencyPath(dep, target, visited, path)) return true;
         }
 
+        path.pop_back();
         return false;
+    }
+
+    static std::string joinPath(const std::vector<std::string>& path) {
+        std::string text;
+        for (std::size_t i = 0; i < path.size(); ++i) {
+            if (i > 0) text += " -> ";
+            text += path[i];
+        }
+        return text;
     }
 };
 

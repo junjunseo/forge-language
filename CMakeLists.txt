@@ -25,6 +25,7 @@ set(IEUM_HEADERS
     src/lexer.h
     src/parser.h
     src/checker.h
+    src/graph.h
     src/semantic.h
     src/interpreter.h
     src/version.h
@@ -46,6 +47,7 @@ add_ieum_executable(ieum src/main.cpp)
 add_ieum_executable(testParser test/testParser.cpp)
 add_ieum_executable(testPipeline test/testPipeline.cpp)
 add_ieum_executable(testChecker test/testChecker.cpp)
+add_ieum_executable(testGraph test/testGraph.cpp)
 add_ieum_executable(testSemantic test/testSemantic.cpp)
 add_ieum_executable(testInterpreter test/testInterpreter.cpp)
 add_ieum_executable(benchmarkChecker benchmark/benchmarkChecker.cpp)
@@ -61,6 +63,7 @@ enable_testing()
 add_test(NAME parser COMMAND testParser)
 add_test(NAME pipeline COMMAND testPipeline)
 add_test(NAME checker COMMAND testChecker)
+add_test(NAME graph COMMAND testGraph)
 add_test(NAME semantic COMMAND testSemantic)
 add_test(NAME interpreter COMMAND testInterpreter)
 add_test(NAME benchmark_smoke COMMAND benchmarkChecker 2 1)
@@ -113,3 +116,38 @@ add_ieum_example_test(semantic_undefined_function 1 "missing")
 add_ieum_example_test(semantic_arity_mismatch 1 "helper")
 add_ieum_example_test(semantic_missing_dependency 1 "depends")
 add_ieum_example_test(semantic_undefined_variable 1 "missing")
+
+function(add_ieum_graph_test name expected_exit)
+    add_test(
+        NAME graph_snapshot_${name}
+        COMMAND ${CMAKE_COMMAND}
+            "-DIEUM_EXECUTABLE=$<TARGET_FILE:ieum>"
+            "-DIEUM_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/examples/${name}.ieum"
+            "-DACTUAL_DOT=${CMAKE_CURRENT_BINARY_DIR}/graph-${name}.dot"
+            "-DEXPECTED_DOT=${CMAKE_CURRENT_SOURCE_DIR}/test/snapshots/${name}.dot"
+            "-DEXPECTED_EXIT=${expected_exit}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyGraph.cmake"
+    )
+endfunction()
+
+add_ieum_graph_test(valid 0)
+add_ieum_graph_test(implicit_dependency 1)
+add_ieum_graph_test(cyclic_dependency 1)
+add_ieum_graph_test(layer_violation 1)
+add_ieum_graph_test(transitive_layer_violation 1)
+add_ieum_graph_test(invalid_declarations 1)
+
+function(add_ieum_graph_failure_test name source expected_exit)
+    add_test(
+        NAME graph_failure_${name}
+        COMMAND ${CMAKE_COMMAND}
+            "-DIEUM_EXECUTABLE=$<TARGET_FILE:ieum>"
+            "-DIEUM_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/examples/${source}.ieum"
+            "-DOUTPUT_TARGET=${CMAKE_CURRENT_BINARY_DIR}"
+            "-DEXPECTED_EXIT=${expected_exit}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyGraphFailure.cmake"
+    )
+endfunction()
+
+add_ieum_graph_failure_test(valid valid 0)
+add_ieum_graph_failure_test(invalid cyclic_dependency 1)
